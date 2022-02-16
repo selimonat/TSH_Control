@@ -11,3 +11,9 @@ setup.poetry:
 	poetry config virtualenvs.create true
 	poetry config virtualenvs.in-project true
 	poetry install --no-interaction --no-ansi
+
+#setup.deta: @ sets up deta micro
+setup.deta:
+	deta new --runtime python3.7 --name TSH_control
+
+
