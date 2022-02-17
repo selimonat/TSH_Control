@@ -229,6 +229,14 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
+name = "deta"
+version = "1.0.1"
+description = "Python SDK for Deta Base & Deta Drive."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "entrypoints"
 version = "0.3"
 description = "Discover and load entry points from installed packages."
@@ -1205,7 +1213,7 @@ testing = ["pytest (>=4.6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytes
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "90b78ac67297eda69c8bba17b4ca7ed87dccddc34ce926cdf993e3e1329f27c5"
+content-hash = "54962cc75ab967f9530abd78291eecbb5861e4901bef556a05a5f4ea92fda53e"
 
 [metadata.files]
 appnope = [
@@ -1385,6 +1393,10 @@ decorator = [
 defusedxml = [
     {file = "defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"},
     {file = "defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69"},
+]
+deta = [
+    {file = "deta-1.0.1-py3-none-any.whl", hash = "sha256:a910c76fe521ee1fd6f5ee5e5b54a53cc1a38508a8026da1b0c02949db319869"},
+    {file = "deta-1.0.1.tar.gz", hash = "sha256:d0e59063419cdd9fdd5e1ead18dc930eaf25484521cdb5431874ff758e61d74e"},
 ]
 entrypoints = [
     {file = "entrypoints-0.3-py2.py3-none-any.whl", hash = "sha256:589f874b313739ad35be6e0cd7efde2a4e9b6fea91edcc34e58ecbb8dbe56d19"},
