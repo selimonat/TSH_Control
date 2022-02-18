@@ -17,17 +17,23 @@ def deta_drive(drive_name='physio'):
     return drive
 
 
-def download(filename):
+def download(filenames):
     """
     Downloads the pickle files from the deta drive. The folder structure is hard coded to the code so you can only
     give the filename.
     Args:
-        filename: One of get_complaints, get_dosage, get_mood, get_tsh
+        filenames:
+            A list containing get_complaints, get_dosage, get_mood, get_tsh or any combinations thereof.
+            For example:
+            filenames = ['get_mood', 'get_tsh', 'get_dosage', 'get_complaints']
 
     Returns:
         A dict export of the pandas dataframe.
     """
+
+    data = dict()
     drive = deta_drive()
-    filename = f'data/clean/{filename}.pkl'
-    data = pickle.loads(drive.get(filename).read())
+    for filename in filenames:
+        filename = f'data/clean/{filename}.pkl'
+        data.update(pickle.loads(drive.get(filename).read()))
     return data

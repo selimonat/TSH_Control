@@ -17,10 +17,10 @@ pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
 
-FILE_LAB = "./data/raw/BloodTests.csv"  # the file that is updated with each lab result
-FILE_RATINGS = "./data/raw/Daylio_export.csv"
-FILE_APPLE_HEALTH = "./data/raw/apple_health_export/export.xml"
-DIR_WRITE = "./data/clean/"
+FILE_LAB = "../data/raw/BloodTests.csv"  # the file that is updated with each lab result
+FILE_RATINGS = "../data/raw/Daylio_export.csv"
+FILE_APPLE_HEALTH = "../data/raw/apple_health_export/export.xml"
+DIR_WRITE = "../data/clean/"
 
 """
     Preprocess lab results, mood ratings and health complaints data, resampled at a weekly resolution.
@@ -52,9 +52,10 @@ def get_tsh():
         ['test_date', 'TSH']
     """
     cols = ['test_date', 'TSH', 'T3', 'T4', 'medication_change_start', 'medication_change_stop', 'dosage']
-    df_tsh = pd.read_csv(FILE_LAB,delimiter=',', header=None,names=cols)
+    df_tsh = pd.read_csv(FILE_LAB, delimiter=',', header=None, names=cols)
     df_tsh["test_date"] = pd.to_datetime(df_tsh["test_date"], format='%d-%m-%Y')
     df_tsh = df_tsh[['test_date', 'TSH']]
+    df_tsh.rename(columns={'TSH': 'tsh'}, inplace=True)
     df_tsh = df_tsh.loc[~df_tsh['test_date'].isna()]
     df_tsh.rename(columns={'test_date': 'startDate'}, inplace=True)
     df_tsh.set_index('startDate', inplace=True)
