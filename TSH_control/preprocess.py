@@ -10,7 +10,8 @@ from deta_utils import deta_drive
 location = '/tmp/cachedir'
 memory = Memory(location, verbose=0)
 
-logging.basicConfig(filename='/tmp/demo.log', level=logging.INFO)
+logging.basicConfig()
+logger = logging.getLogger(__name__)
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', 500)
@@ -37,9 +38,16 @@ def get_dosage():
     cols = ['test_date', 'TSH', 'T3', 'T4', 'medication_change_start', 'medication_change_stop', 'dosage']
     df_dosage = pd.read_csv(FILE_LAB, delimiter=',', header=None, names=cols)
     df_dosage["medication_change_start"] = pd.to_datetime(df_dosage["medication_change_start"], format='%d-%m-%Y')
-    df_dosage = df_dosage[['medication_change_start', 'dosage']]
-    df_dosage = df_dosage.loc[~df_dosage['medication_change_start'].isna()]
-    df_dosage.rename(columns={'medication_change_start': 'startDate'}, inplace=True)
+    df_dosage["medication_change_stop"] = pd.to_datetime(df_dosage["medication_change_stop"], format='%d-%m-%Y')
+
+    # make data
+    df_dosage = pd.concat([
+        pd.DataFrame({'startDate': df_dosage["medication_change_start"], 'dosage': df_dosage["dosage"]}),
+        pd.DataFrame({'startDate': df_dosage["medication_change_stop"], 'dosage': df_dosage[
+            "dosage"]})]).sort_values(by='startDate')
+
+    df_dosage = df_dosage[['startDate', 'dosage']]
+
     df_dosage.set_index('startDate', inplace=True)
     return df_dosage
 
@@ -122,6 +130,7 @@ def get_apple_health():
 
     iter_records = memory.cache(_iter_records)  # cache the above.
 
+    logging.info("Parsing Health.app XML, this may take few minutes.")
     data = xml.etree.ElementTree.parse(FILE_APPLE_HEALTH).getroot()
     logging.info("Converting Health.app XML to DF, this may take few minutes.")
     df_apple = pd.DataFrame.from_dict(iter_records(data))
