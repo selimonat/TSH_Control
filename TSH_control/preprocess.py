@@ -10,7 +10,9 @@ from deta_utils import deta_drive
 location = '/tmp/cachedir'
 memory = Memory(location, verbose=0)
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG,
+                    format='[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
+                    )
 logger = logging.getLogger(__name__)
 
 pd.set_option('display.max_columns', None)
@@ -35,6 +37,7 @@ def get_dosage():
         :return: df with the following columns
         ['medication_change_start', 'dosage']
     """
+    logger.info('Getting dosage data.')
     cols = ['test_date', 'TSH', 'T3', 'T4', 'medication_change_start', 'medication_change_stop', 'dosage']
     df_dosage = pd.read_csv(FILE_LAB, delimiter=',', header=None, names=cols)
     df_dosage["medication_change_start"] = pd.to_datetime(df_dosage["medication_change_start"], format='%d-%m-%Y')
@@ -59,6 +62,7 @@ def get_tsh():
         :return: df with the following columns
         ['test_date', 'TSH']
     """
+    logger.info('Getting tsh data.')
     cols = ['test_date', 'TSH', 'T3', 'T4', 'medication_change_start', 'medication_change_stop', 'dosage']
     df_tsh = pd.read_csv(FILE_LAB, delimiter=',', header=None, names=cols)
     df_tsh["test_date"] = pd.to_datetime(df_tsh["test_date"], format='%d-%m-%Y')
@@ -76,6 +80,7 @@ def get_mood():
     :return: df
     """
     # read mood data
+    logger.info('Getting mood data.')
     df_mood = pd.read_csv(FILE_RATINGS, usecols=[0, 4])
     df_mood.index = pd.to_datetime(df_mood["full_date"])
     df_mood.sort_index(inplace=True)
@@ -92,6 +97,7 @@ def get_complaints():
     :return: a df with one binary dummy variable for each health complaint data.
     """
     # read mood data
+    logger.info('Getting complaints data.')
     df_mood = pd.read_csv(FILE_RATINGS, usecols=[0, 4, 5])
     df_mood.index = pd.to_datetime(df_mood["full_date"])
     df_mood.sort_index(inplace=True)
@@ -130,19 +136,19 @@ def get_apple_health():
 
     iter_records = memory.cache(_iter_records)  # cache the above.
 
-    logging.info("Parsing Health.app XML, this may take few minutes.")
+    logger.info("Parsing Health.app XML.")
     data = xml.etree.ElementTree.parse(FILE_APPLE_HEALTH).getroot()
-    logging.info("Converting Health.app XML to DF, this may take few minutes.")
+    logger.info("Converting XML to DF.")
     df_apple = pd.DataFrame.from_dict(iter_records(data))
     df_apple['startDate'] = pd.to_datetime(df_apple["startDate"])
-    logging.info('Available data types in this dataset:')
-    logging.info(df_apple.type.unique())
+    logger.info('Available data types in this dataset:')
+    logger.info(df_apple.type.unique())
     act_types = {'HKQuantityTypeIdentifierBodyMass': 'weight',
                  'HKQuantityTypeIdentifierDistanceWalkingRunning': 'exercise'}
 
     store = list()
     for act in list(act_types.keys()):
-        logging.info('Dealing with ' + act)
+        logger.info(f'Getting {act} data.')
         df = df_apple.loc[df_apple.type == act, ['startDate', 'value']]
         df['value'] = df['value'].astype(float)
         mask = df['startDate'] >= '2018-09'
@@ -182,10 +188,12 @@ def data_to(where='local'):
         df.index = df.index.astype(str)
         filename = f'{DIR_WRITE}{fun.__name__}.pkl'
         if where is 'local':
+            logger.info(f"Pickling {filename} to local disk.")
             with open(filename, 'wb') as handle:
                 pickle.dump(df.to_dict(), handle, protocol=pickle.HIGHEST_PROTOCOL)
         elif where is 'remote':
             if os.path.isfile(filename):
+                logger.info(f"Sending {filename} to deta drive.")
                 drive.put(filename, path=filename)
             else:
                 raise ValueError('Local files are not yet saved.')
