@@ -4,9 +4,8 @@ import xml.etree.ElementTree
 from joblib import Memory
 import logging
 import pickle
-import configparser
-from deta import Deta
 import os.path
+from deta_utils import deta_drive
 
 location = '/tmp/cachedir'
 memory = Memory(location, verbose=0)
@@ -167,11 +166,7 @@ def data_to(where='local'):
     Returns:
         True.
     """
-    parser = configparser.ConfigParser()
-    parser.read('config.txt')
-    deta = Deta(parser.get("deta", 'projectKey'))
-    drive = deta.Drive("physio")
-
+    drive = deta_drive(drive_name='physio')
     for fun in get_funs():
         df = fun()
         df.index = df.index.astype(str)
