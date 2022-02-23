@@ -7,7 +7,7 @@ import pickle
 import os.path
 from deta_utils import deta_drive
 
-location = '/tmp/cachedir'
+location = '../cachedir'
 memory = Memory(location, verbose=0)
 
 logging.basicConfig(level=logging.DEBUG,
@@ -23,6 +23,7 @@ pd.set_option('display.width', 1000)
 FILE_LAB = "../data/raw/BloodTests.csv"  # the file that is updated with each lab result
 FILE_RATINGS = "../data/raw/Daylio_export.csv"
 FILE_APPLE_HEALTH = "../data/raw/apple_health_export/export.xml"
+FILE_APPLE_HEALTH_READY = "../data/raw/apple_health_export/export_ready.xml"
 DIR_WRITE = "../data/clean/"
 
 """
@@ -52,12 +53,15 @@ def get_dosage():
     df_dosage = df_dosage[['startDate', 'dosage']]
 
     df_dosage.set_index('startDate', inplace=True)
-    return df_dosage
+
+    df_dosage2 = df_dosage.resample('W-MON').mean().interpolate(method='nearest')
+    return df_dosage2
 
 
 def get_tsh():
     """
-        Get blood test results, source: manual txt file.
+        Get TSH time-series resampled weekly, aligned to Mondays.
+        source: manual txt file.
 
         :return: df with the following columns
         ['test_date', 'TSH']
@@ -71,12 +75,16 @@ def get_tsh():
     df_tsh = df_tsh.loc[~df_tsh['test_date'].isna()]
     df_tsh.rename(columns={'test_date': 'startDate'}, inplace=True)
     df_tsh.set_index('startDate', inplace=True)
-    return df_tsh
+    # this protects the step-wise nature of the dosage regime.
+    df_tsh2 = df_tsh.resample('D').mean().pad().resample('W-MON').max()
+    return df_tsh2
 
 
 def get_mood():
     """
-    Reads mood ratings from file and returns a df. Source: Daylio app export.
+    Reads mood ratings from file and returns a time-series resampled weekly, aligned to Mondays.
+
+    Source: Daylio app export.
     :return: df
     """
     # read mood data
@@ -86,7 +94,7 @@ def get_mood():
     df_mood.sort_index(inplace=True)
     df_mood.index.rename('startDate', inplace=True)
 
-    df_mood = df_mood.resample('W', convention='start').mean()
+    df_mood = df_mood.resample('W-MON', convention='start').mean()
 
     return df_mood
 
@@ -107,10 +115,26 @@ def get_complaints():
     for col in act:
         act[col] = act[col].str.strip()
     act = pd.get_dummies(act.stack().droplevel(1))
-    act = act.resample('W', convention='start').sum()
+    act = act.resample('W-MON', convention='start').sum()
     act.index.rename('startDate', inplace=True)
-
+    # remove columns which are not complaints
+    cols = ['arrhythmia', 'bad_sleep', 'eyes hurte', 'fatigue', 'mood_angry', 'pain_back', 'pain_bone', 'pain_chest',
+            'pain_foot', 'pain_hand', 'pain_hip', 'pain_knee', 'pain_neck', 'pain_stomach', 'restless']
+    act = act[cols]
     return act
+
+
+def get_cumulative_complaints():
+    """
+    Generates a cumulative view of complaints by aggregating across all complaints for a given time point.
+
+    Returns:
+    df, where each time interval consists of the sum
+    """
+    df = get_complaints()
+    df = pd.DataFrame({'complaints': df.sum(axis=1)})
+
+    return df
 
 
 def get_apple_health():
@@ -119,7 +143,7 @@ def get_apple_health():
         :return: df
     """
 
-    def _iter_records(health_data) -> dict or None:
+    def iter_records(health_data) -> dict or None:
         """
             Utility to parse Apple Health.app data export.
         """
@@ -134,12 +158,17 @@ def get_apple_health():
                     rec_dict[k] = v
             yield rec_dict
 
-    iter_records = memory.cache(_iter_records)  # cache the above.
+    if not os.path.isfile(FILE_APPLE_HEALTH_READY):
+        logger.info("Parsing Health.app XML.")
+        data = xml.etree.ElementTree.parse(FILE_APPLE_HEALTH).getroot()
+        logger.info("Converting XML to DF.")
+        df_apple = pd.DataFrame.from_dict(iter_records(data))
+        df_apple.to_csv(FILE_APPLE_HEALTH_READY)
+    else:
+        logger.info("Loading Apple Health data from disk.")
+        df_apple = pd.read_csv(FILE_APPLE_HEALTH_READY)
 
-    logger.info("Parsing Health.app XML.")
-    data = xml.etree.ElementTree.parse(FILE_APPLE_HEALTH).getroot()
-    logger.info("Converting XML to DF.")
-    df_apple = pd.DataFrame.from_dict(iter_records(data))
+    logger.info("Converting obj to datetime.")
     df_apple['startDate'] = pd.to_datetime(df_apple["startDate"])
     logger.info('Available data types in this dataset:')
     logger.info(df_apple.type.unique())
@@ -154,8 +183,8 @@ def get_apple_health():
         mask = df['startDate'] >= '2018-09'
         df = df[mask]
         df = df.set_index('startDate')
-        store.append(pd.concat([pd.DataFrame({act_types[act] + "_mean": df.resample('W')['value'].mean()}),
-                                pd.DataFrame({act_types[act] + "_std": df.resample('W')['value'].std()})],
+        store.append(pd.concat([pd.DataFrame({act_types[act] + "_mean": df.resample('W-MON')['value'].mean()}),
+                                pd.DataFrame({act_types[act] + "_std": df.resample('W-MON')['value'].std()})],
                                axis=1))
 
     df = pd.concat(store, axis=1)
@@ -167,7 +196,8 @@ def get_funs():
         Returns all the available functions returning physiological datasets.
         Use this to loop over.
     """
-    return [get_tsh, get_dosage, get_mood, get_complaints]
+    return [get_tsh, get_dosage, get_mood, get_complaints, get_cumulative_complaints, get_apple_health,
+            get_correlation]
 
 
 def data_to(where='local'):
@@ -190,8 +220,13 @@ def data_to(where='local'):
         if where is 'local':
             logger.info(f"Pickling {filename} to local disk.")
             with open(filename, 'wb') as handle:
-                pickle.dump(df.to_dict(), handle, protocol=pickle.HIGHEST_PROTOCOL)
-        elif where is 'remote':
+                dummy = df.to_dict()
+                # we have to add this top level key otherwise as the correlation dict is loaded
+                # previously loaded keys get overwritten.
+                if fun is get_correlation:
+                    dummy = {'correlation': dummy}
+                pickle.dump(dummy, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        elif where is 'remote':  # for remote to work local must be first called.
             if os.path.isfile(filename):
                 logger.info(f"Sending {filename} to deta drive.")
                 drive.put(filename, path=filename)
@@ -200,6 +235,24 @@ def data_to(where='local'):
         else:
             raise ValueError('where argument must be either \'local\' or \'remote\'.')
     return True
+
+
+def get_correlation():
+    """
+
+    Returns:
+        df
+    """
+    logger.info('Computing correlation matrix, will need to call all funs')
+    dfl = list()
+    for f in [get_tsh, get_dosage, get_mood, get_cumulative_complaints, get_apple_health]:
+        dfl.append(f())
+    df = pd.concat(dfl, axis=1)
+    # only take interesting columns
+    df = df[['tsh', 'dosage', 'mood', 'complaints', 'weight_mean', 'exercise_mean']].corr().pow(2)
+    # zero the diagonal
+    df.values[[list(range(df.shape[0]))]*2] = 0
+    return df
 
 
 if __name__ == "__main__":

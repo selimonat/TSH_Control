@@ -1,9 +1,26 @@
 import configparser
 from deta import Deta
 import pickle
+import logging
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
+                    )
+logger = logging.getLogger(__name__)
 
 parser = configparser.ConfigParser()
 parser.read('config.txt')
+
+
+def ensure_iterable(obj):
+    """
+    Ensures OBJ is iterables by wrapping it inside a list when needed.
+    :param obj:
+    :return:
+    """
+    if type(obj) is not list():
+        obj = [obj]
+    return obj
 
 
 def deta_drive(drive_name='physio'):
@@ -30,10 +47,13 @@ def download(filenames):
     Returns:
         A dict export of the pandas dataframe.
     """
+    # filenames = ensure_iterable(filenames)
 
     data = dict()
     drive = deta_drive()
     for filename in filenames:
+        logger.info(f"Downloading {filename}.")
         filename = f'data/clean/{filename}.pkl'
         data.update(pickle.loads(drive.get(filename).read()))
     return data
+
