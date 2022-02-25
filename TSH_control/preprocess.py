@@ -23,8 +23,10 @@ pd.set_option('display.width', 1000)
 FILE_LAB = "../data/raw/BloodTests.csv"  # the file that is updated with each lab result
 FILE_RATINGS = "../data/raw/Daylio_export.csv"
 FILE_APPLE_HEALTH = "../data/raw/apple_health_export/export.xml"
-FILE_APPLE_HEALTH_READY = "../data/raw/apple_health_export/export_ready.xml"
+FILE_APPLE_HEALTH_READY = "../data/raw/apple_health_export/export_ready.csv"
 DIR_WRITE = "../data/clean/"
+
+RESOLUTION = 'M'
 
 """
     Preprocess lab results, mood ratings and health complaints data, resampled at a weekly resolution.
@@ -54,7 +56,7 @@ def get_dosage():
 
     df_dosage.set_index('startDate', inplace=True)
 
-    df_dosage2 = df_dosage.resample('W-MON').mean().interpolate(method='nearest')
+    df_dosage2 = df_dosage.resample(RESOLUTION).mean().interpolate(method='nearest')
     return df_dosage2
 
 
@@ -76,7 +78,7 @@ def get_tsh():
     df_tsh.rename(columns={'test_date': 'startDate'}, inplace=True)
     df_tsh.set_index('startDate', inplace=True)
     # this protects the step-wise nature of the dosage regime.
-    df_tsh2 = df_tsh.resample('D').mean().pad().resample('W-MON').max()
+    df_tsh2 = df_tsh.resample('D').mean().pad().resample(RESOLUTION).max()
     return df_tsh2
 
 
@@ -94,7 +96,7 @@ def get_mood():
     df_mood.sort_index(inplace=True)
     df_mood.index.rename('startDate', inplace=True)
 
-    df_mood = df_mood.resample('W-MON', convention='start').mean()
+    df_mood = df_mood.resample(RESOLUTION, convention='start').mean()
 
     return df_mood
 
@@ -115,7 +117,7 @@ def get_complaints():
     for col in act:
         act[col] = act[col].str.strip()
     act = pd.get_dummies(act.stack().droplevel(1))
-    act = act.resample('W-MON', convention='start').sum()
+    act = act.resample(RESOLUTION, convention='start').sum()
     act.index.rename('startDate', inplace=True)
     # remove columns which are not complaints
     cols = ['arrhythmia', 'bad_sleep', 'eyes hurte', 'fatigue', 'mood_angry', 'pain_back', 'pain_bone', 'pain_chest',
@@ -152,10 +154,12 @@ def get_apple_health():
             rec_dict = health_data_attr.copy()
             rec_dict.update(health_data.attrib)
             for k, v in rec.attrib.items():
-                if 'date' in k.lower():
-                    rec_dict[k] = datetime.datetime.strptime(v, '%Y-%m-%d %H:%M:%S %z').date()
-                else:
-                    rec_dict[k] = v
+                # if 'date' in k.lower():
+                #     res = datetime.datetime.strptime(v, '%Y-%m-%d %H:%M:%S %z').date()
+                # print(f"{k},{v} ==> {res}")
+                # rec_dict[k] = v
+                # else:
+                rec_dict[k] = v
             yield rec_dict
 
     if not os.path.isfile(FILE_APPLE_HEALTH_READY):
@@ -166,10 +170,10 @@ def get_apple_health():
         df_apple.to_csv(FILE_APPLE_HEALTH_READY)
     else:
         logger.info("Loading Apple Health data from disk.")
-        df_apple = pd.read_csv(FILE_APPLE_HEALTH_READY)
+        date_cols = ['creationDate', 'startDate', 'endDate']
+        df_apple = pd.read_csv(FILE_APPLE_HEALTH_READY, parse_dates=date_cols)
 
     logger.info("Converting obj to datetime.")
-    df_apple['startDate'] = pd.to_datetime(df_apple["startDate"])
     logger.info('Available data types in this dataset:')
     logger.info(df_apple.type.unique())
     act_types = {'HKQuantityTypeIdentifierBodyMass': 'weight',
@@ -178,14 +182,27 @@ def get_apple_health():
     store = list()
     for act in list(act_types.keys()):
         logger.info(f'Getting {act} data.')
-        df = df_apple.loc[df_apple.type == act, ['startDate', 'value']]
+        df = df_apple.loc[df_apple.type == act, ['startDate', 'value','sourceName']]
         df['value'] = df['value'].astype(float)
         mask = df['startDate'] >= '2018-09'
         df = df[mask]
-        df = df.set_index('startDate')
-        store.append(pd.concat([pd.DataFrame({act_types[act] + "_mean": df.resample('W-MON')['value'].mean()}),
-                                pd.DataFrame({act_types[act] + "_std": df.resample('W-MON')['value'].std()})],
-                               axis=1))
+        df['week_number'] = df.startDate.dt.week
+        df['year'] = df.startDate.dt.year
+
+        df1 = df.groupby(['week_number', 'year', 'sourceName']).sum().reset_index()
+
+        dates = df1.year*100+df1.week_number
+
+        df1['date'] = pd.to_datetime(dates.astype(str) + '1', format='%Y%W%w')
+        df1 = df1.set_index('date')
+        df1 = df1.drop(columns=['week_number', 'year'])
+
+        df=pd.DataFrame(df1.reset_index().pivot_table(index='date',columns='sourceName',values='value',
+                                                  aggfunc='mean').mean(axis=1), columns=['value'])
+
+        store.append(pd.concat([pd.DataFrame({act_types[act] + "_mean": df.resample(RESOLUTION)['value'].mean()}),
+                                pd.DataFrame({act_types[act] + "_std": df.resample(RESOLUTION)['value'].std()})],
+                                axis=1))
 
     df = pd.concat(store, axis=1)
     return df
@@ -256,7 +273,7 @@ def get_correlation():
 
 
 if __name__ == "__main__":
-
+    # df_apple = get_apple_health()
     dfl = list()
     for f in get_funs():
         dfl.append(f())
