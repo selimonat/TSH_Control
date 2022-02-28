@@ -3,7 +3,6 @@ from flask import Flask
 import deta_utils
 from plotly.subplots import make_subplots
 import plotly.graph_objs as go
-import plotly.express as px
 
 app = Flask(__name__)
 dash_app = Dash(server=app)
@@ -38,7 +37,16 @@ for k1 in list(d):
     L.append(l)
 
 
-corr_fig = px.imshow(L, x=col_name, y=col_name, text_auto=".2f", aspect="auto")
+# corr_fig = px.imshow(L, x=col_name, y=col_name, text_auto=".2f", aspect="auto")
+
+corr_fig = go.Figure(data=go.Heatmap(
+    z=L,
+    x=col_name,
+    y=col_name,
+    texttemplate="%{z:.2f}",
+    showscale=True,
+    ))
+corr_fig.layout.title = 'Pearson Correlation'
 
 fig = make_subplots(rows=6,
                     cols=1,
@@ -55,6 +63,7 @@ fig.append_trace(d_weight, 5, 1)
 fig.append_trace(d_exercice, 6, 1)
 
 fig['layout']['margin'] = {'l': 100, 'r': 10, 'b': 50, 't': 50}
+fig.layout.title = 'Physiological Time-Series'
 
 dash_app.layout = html.Div(children=[
                                     dcc.Graph(
