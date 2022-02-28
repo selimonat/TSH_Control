@@ -1,6 +1,6 @@
 # TSH_Control: A diary for your blood parameters
 
-TSH_Control is a health dashboard to monitor health parameters. 
+TSH_Control is a health dashboard to monitor health parameters. It is coded using `Dash`.
 
 I use it to track my own TSH levels and medicament dosage, as it needs to be monitored regularly.
 
@@ -21,3 +21,6 @@ Most of the preprocessing occurs locally.
 
 - Blood tests and dosage data could probably be stored in Apple Health, but I keep track of them in a csv file.
 
+# Installation
+
+Run `make setup.env` to setup the Python and the deta environments. Python environment is needed to preprocess data and locally run Dash app. Deta is needed to deploy the app and datasets to Deta cloud. You need a `config.txt` to contain Deta credentials with `projectKey` and `projectID` keys.
