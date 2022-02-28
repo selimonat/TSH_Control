@@ -6,6 +6,7 @@ import logging
 import pickle
 import os.path
 from deta_utils import deta_drive
+from utils import iter_records
 
 location = '../cachedir'
 memory = Memory(location, verbose=0)
@@ -23,7 +24,7 @@ pd.set_option('display.width', 1000)
 FILE_LAB = "../data/raw/BloodTests.csv"  # the file that is updated with each lab result
 FILE_RATINGS = "../data/raw/Daylio_export.csv"
 FILE_APPLE_HEALTH = "../data/raw/apple_health_export/export.xml"
-FILE_APPLE_HEALTH_READY = "../data/raw/apple_health_export/export_ready.csv"
+FILE_APPLE_HEALTH_CACHE = "../data/raw/apple_health_export/export_cached.csv"
 DIR_WRITE = "../data/clean/"
 
 RESOLUTION = 'M'
@@ -139,73 +140,73 @@ def get_cumulative_complaints():
     return df
 
 
-def get_apple_health():
+def return_apple_health_as_df(force=False):
     """
-        Read iOS Health.app data export
-        :return: df
+    Caches raw apple health export as a pandas dataframe. Use force to re-cache it.
+    Returns:
+        A pandas dataframe.
     """
-
-    def iter_records(health_data) -> dict or None:
-        """
-            Utility to parse Apple Health.app data export.
-        """
-        health_data_attr = health_data.attrib
-        for rec in health_data.iterfind('.//Record'):
-            rec_dict = health_data_attr.copy()
-            rec_dict.update(health_data.attrib)
-            for k, v in rec.attrib.items():
-                # if 'date' in k.lower():
-                #     res = datetime.datetime.strptime(v, '%Y-%m-%d %H:%M:%S %z').date()
-                # print(f"{k},{v} ==> {res}")
-                # rec_dict[k] = v
-                # else:
-                rec_dict[k] = v
-            yield rec_dict
-
-    if not os.path.isfile(FILE_APPLE_HEALTH_READY):
+    if not os.path.isfile(FILE_APPLE_HEALTH_CACHE):
         logger.info("Parsing Health.app XML.")
         data = xml.etree.ElementTree.parse(FILE_APPLE_HEALTH).getroot()
         logger.info("Converting XML to DF.")
         df_apple = pd.DataFrame.from_dict(iter_records(data))
-        df_apple.to_csv(FILE_APPLE_HEALTH_READY)
+        df_apple = df_apple[['startDate', 'value', 'sourceName', 'type']]
+        df_apple['startDate'] = pd.to_datetime(df_apple['startDate'])
+        df_apple.to_csv(FILE_APPLE_HEALTH_CACHE)
+        logger.info("File cached.")
     else:
         logger.info("Loading Apple Health data from disk.")
-        date_cols = ['creationDate', 'startDate', 'endDate']
-        df_apple = pd.read_csv(FILE_APPLE_HEALTH_READY, parse_dates=date_cols)
+        df_apple = pd.read_csv(FILE_APPLE_HEALTH_CACHE, parse_dates=['startDate'], index_col=[0])
 
-    logger.info("Converting obj to datetime.")
-    logger.info('Available data types in this dataset:')
-    logger.info(df_apple.type.unique())
-    act_types = {'HKQuantityTypeIdentifierBodyMass': 'weight',
-                 'HKQuantityTypeIdentifierDistanceWalkingRunning': 'exercise'}
+    mask = df_apple['startDate'] >= '2018-09'
+    df_apple = df_apple[mask]
+    df_apple['week_number'] = df_apple.startDate.dt.isocalendar().week
+    df_apple['year'] = df_apple.startDate.dt.isocalendar().year
+    return df_apple
 
-    store = list()
-    for act in list(act_types.keys()):
-        logger.info(f'Getting {act} data.')
-        df = df_apple.loc[df_apple.type == act, ['startDate', 'value','sourceName']]
-        df['value'] = df['value'].astype(float)
-        mask = df['startDate'] >= '2018-09'
-        df = df[mask]
-        df['week_number'] = df.startDate.dt.week
-        df['year'] = df.startDate.dt.year
 
-        df1 = df.groupby(['week_number', 'year', 'sourceName']).sum().reset_index()
+def get_apple_health_weight():
+    """
+        Read iOS Health.app data export
+        :return: df
+    """
+    act = 'HKQuantityTypeIdentifierBodyMass'
+    logger.info(f'Getting {act} data.')
+    df_apple = return_apple_health_as_df()
+    df_apple = df_apple.loc[df_apple.type == act]
+    df_apple['value'] = df_apple['value'].astype(float)
 
-        dates = df1.year*100+df1.week_number
+    df1 = df_apple.groupby(['week_number', 'year', 'sourceName']).mean().reset_index()
+    dates = df1.year*100+df1.week_number
+    df1['date'] = pd.to_datetime(dates.astype(str) + '1', format='%Y%W%w')
 
-        df1['date'] = pd.to_datetime(dates.astype(str) + '1', format='%Y%W%w')
-        df1 = df1.set_index('date')
-        df1 = df1.drop(columns=['week_number', 'year'])
+    df1 = df1.set_index('date')
+    df1 = df1.drop(columns=['week_number', 'year'])
+    df1 = df1.sort_index()
+    return pd.DataFrame({"weight": df1.resample(RESOLUTION)['value'].mean()}).interpolate(method='linear')
 
-        df=pd.DataFrame(df1.reset_index().pivot_table(index='date',columns='sourceName',values='value',
-                                                  aggfunc='mean').mean(axis=1), columns=['value'])
 
-        store.append(pd.concat([pd.DataFrame({act_types[act] + "_mean": df.resample(RESOLUTION)['value'].mean()}),
-                                pd.DataFrame({act_types[act] + "_std": df.resample(RESOLUTION)['value'].std()})],
-                                axis=1))
+def get_apple_health_distance():
+    """
+        Read iOS Health.app data export
+        :return: df
+    """
+    act = 'HKQuantityTypeIdentifierDistanceWalkingRunning'
+    logger.info(f'Getting {act} data.')
+    df_apple = return_apple_health_as_df()
+    df_apple = df_apple.loc[df_apple.type == act]
+    df_apple['value'] = df_apple.loc[:, 'value'].astype(float)
 
-    df = pd.concat(store, axis=1)
-    return df
+    df = df_apple.groupby(['week_number', 'year', 'sourceName']).sum().reset_index()
+    dates = df.year*100+df.week_number
+    df['date'] = pd.to_datetime(dates.astype(str) + '1', format='%Y%W%w')
+
+    df = pd.DataFrame(df.reset_index().pivot_table(index='date', columns='sourceName', values='value',
+                                              aggfunc='mean').mean(axis=1), columns=['value'])
+
+    df = df.sort_index()
+    return pd.DataFrame({"distance": df.resample(RESOLUTION)['value'].mean()})
 
 
 def get_funs():
@@ -213,8 +214,8 @@ def get_funs():
         Returns all the available functions returning physiological datasets.
         Use this to loop over.
     """
-    return [get_tsh, get_dosage, get_mood, get_complaints, get_cumulative_complaints, get_apple_health,
-            get_correlation]
+    return [get_tsh, get_dosage, get_mood, get_complaints, get_cumulative_complaints, get_apple_health_weight,
+            get_apple_health_distance, get_correlation]
 
 
 def data_to(where='local'):
@@ -262,20 +263,21 @@ def get_correlation():
     """
     logger.info('Computing correlation matrix, will need to call all funs')
     dfl = list()
-    for f in [get_tsh, get_dosage, get_mood, get_cumulative_complaints, get_apple_health]:
+    for f in [get_tsh, get_dosage, get_mood, get_cumulative_complaints, get_apple_health_weight,
+              get_apple_health_distance]:
         dfl.append(f())
     df = pd.concat(dfl, axis=1)
     # only take interesting columns
-    df = df[['tsh', 'dosage', 'mood', 'complaints', 'weight_mean', 'exercise_mean']].corr().pow(2)
+    df = df[['tsh', 'dosage', 'mood', 'complaints', 'weight', 'distance']].corr().pow(2)
     # zero the diagonal
     df.values[[list(range(df.shape[0]))]*2] = 0
     return df
 
 
 if __name__ == "__main__":
-    # df_apple = get_apple_health()
-    dfl = list()
-    for f in get_funs():
-        dfl.append(f())
+    # df = get_apple_health_distance()
+    # dfl = list()
+    # for f in get_funs():
+    #     dfl.append(f())
     data_to('local')
     data_to('remote')

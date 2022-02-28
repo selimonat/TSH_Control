@@ -8,21 +8,21 @@ import plotly.express as px
 app = Flask(__name__)
 dash_app = Dash(server=app)
 
-d = deta_utils.download(['get_mood', 'get_tsh', 'get_dosage', 'get_cumulative_complaints', 'get_apple_health',
-                         'get_correlation'])
+d = deta_utils.download(['get_mood', 'get_tsh', 'get_dosage', 'get_cumulative_complaints', 'get_apple_health_distance',
+                         'get_apple_health_weight', 'get_correlation'])
 
 d_mood = {'x': list(d['mood']), 'y': list(d['mood'].values()), 'name': 'mood', 'marker': {'color': 'rgb(55, 83, 109)'}}
 d_tsh = {'x': list(d['tsh']), 'y': list(d['tsh'].values()), 'name': 'tsh', 'marker': {'color': 'rgb(55, 83, 109)'}}
 d_dosage = {'x': list(d['dosage']), 'y': list(d['dosage'].values()), 'name': 'dosage',
             'marker': {'color': 'rgb(55, 83, 109)'}}
 
-d_cumplaints = {'x': list(d['complaints']), 'y': list(d['complaints'].values()), 'name': 'complaints',
+d_complaints = {'x': list(d['complaints']), 'y': list(d['complaints'].values()), 'name': 'complaints',
                 'marker': {'color': 'rgb(55, 83, 109)'}}
 
-d_weight = {'x': list(d['weight_mean']), 'y': list(d['weight_mean'].values()), 'name': 'weight_mean',
+d_weight = {'x': list(d['weight']), 'y': list(d['weight'].values()), 'name': 'weight',
             'marker': {'color': 'rgb(55, 83, 109)'}}
 
-d_exercice = {'x': list(d['exercise_mean']), 'y': list(d['exercise_mean'].values()), 'name': 'exercise_mean',
+d_exercice = {'x': list(d['distance']), 'y': list(d['distance'].values()), 'name': 'distance',
               'marker': {'color': 'rgb(55, 83, 109)'}}
 
 
@@ -50,7 +50,7 @@ fig = make_subplots(rows=6,
 fig.append_trace(d_mood, 1, 1)
 fig.append_trace(d_tsh, 2, 1)
 fig.append_trace(d_dosage, 3, 1)
-fig.append_trace(d_cumplaints, 4, 1)
+fig.append_trace(d_complaints, 4, 1)
 fig.append_trace(d_weight, 5, 1)
 fig.append_trace(d_exercice, 6, 1)
 
