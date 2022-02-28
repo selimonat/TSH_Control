@@ -1,5 +1,5 @@
 #setup:	@ set up all requirements
-setup.env: setup.pip setup.poetry
+setup.env: setup.pip setup.poetry setup.deta
 
 #setup.pip:	@ set up pip and poetry
 setup.pip:
